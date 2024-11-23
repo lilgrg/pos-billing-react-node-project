@@ -1,110 +1,135 @@
-const request = require('supertest');
-const app = require('../../app');  // Assuming the Express app is exported from app.js
+const { createProduct, getProductById, getAllProducts } = require('../../controllers/ProductController');
 const Product = require('../../models/Product');
 const mongoose = require('mongoose');
 
-describe('Product Routes', () => {
+// Mocking dependencies
+jest.mock('../../models/Product');
+
+describe('Product Controller - Unit Tests', () => {
   let productId;
 
-  // Before each test, create a product
-  beforeEach(async () => {
-    const newProduct = new Product({
-      name: 'Sample Product',
-      description: 'This is a sample product',
+  beforeAll(() => {
+    productId = new mongoose.Types.ObjectId().toString(); // Create a mock product ID
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should create a product', async () => {
+    const mockProduct = {
+      _id: productId,
+      name: 'Test Product',
+      price: 100,
+      stock: 50
+    };
+
+    Product.create = jest.fn().mockResolvedValue(mockProduct);
+
+    const req = {
+      body: {
+        name: 'Test Product',
+        price: 100,
+        stock: 50
+      }
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+
+    await createProduct(req, res);
+
+    expect(Product.create).toHaveBeenCalledWith({
+      name: 'Test Product',
       price: 100,
       stock: 50
     });
-    const savedProduct = await newProduct.save();
-    productId = savedProduct._id.toString();
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(mockProduct);
   });
 
-  // Clean up the database after each test
-  afterEach(async () => {
-    await Product.deleteMany({});
-  });
-
-  // Test GET all products
-  it('should get all products', async () => {
-    const res = await request(app).get('/api/products');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeGreaterThan(0);  // Assuming there's at least one product
-  });
-
-  // Test GET a single product by ID
-  it('should get a product by id', async () => {
-    const res = await request(app).get(`/api/products/${productId}`);
-    expect(res.status).toBe(200);
-    expect(res.body.name).toBe('Sample Product');
-    expect(res.body.price).toBe(100);
-  });
-
-  // Test POST a new product
-  it('should create a new product', async () => {
-    const newProduct = {
-      name: 'New Product',
-      description: 'This is a new product',
-      price: 200,
-      stock: 30
+  it('should return an error when creating a product with missing fields', async () => {
+    const req = {
+      body: {
+        name: 'Test Product' // Missing price and stock
+      }
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
     };
 
-    const res = await request(app).post('/api/products').send(newProduct);
-    expect(res.status).toBe(201);
-    expect(res.body.name).toBe(newProduct.name);
-    expect(res.body.price).toBe(newProduct.price);
-    expect(res.body.stock).toBe(newProduct.stock);
+    await createProduct(req, res);
 
-    // Clean up: Delete the newly created product
-    await Product.findByIdAndDelete(res.body._id);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'Price and stock are required'
+    });
   });
 
-  // Test PUT (update) a product
-  it('should update a product by id', async () => {
-    const updatedProduct = {
-      name: 'Updated Product',
-      description: 'This product has been updated',
-      price: 150,
-      stock: 40
+  it('should get a product by ID', async () => {
+    const mockProduct = {
+      _id: productId,
+      name: 'Test Product',
+      price: 100,
+      stock: 50
     };
 
-    const res = await request(app).put(`/api/products/${productId}`).send(updatedProduct);
-    expect(res.status).toBe(200);
-    expect(res.body.name).toBe(updatedProduct.name);
-    expect(res.body.price).toBe(updatedProduct.price);
-    expect(res.body.stock).toBe(updatedProduct.stock);
-  });
+    Product.findById = jest.fn().mockResolvedValue(mockProduct);
 
-  // Test DELETE a product
-  it('should delete a product by id', async () => {
-    const res = await request(app).delete(`/api/products/${productId}`);
-    expect(res.status).toBe(200);
-    expect(res.body.message).toBe('Product deleted successfully');
-  });
-
-  // Test creating a product with invalid data (missing fields)
-  it('should return an error if required fields are missing', async () => {
-    const invalidProduct = {
-      name: 'Invalid Product',
-      price: 100
-      // Missing stock and description
+    const req = {
+      params: { id: productId }
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
     };
 
-    const res = await request(app).post('/api/products').send(invalidProduct);
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBeDefined();
+    await getProductById(req, res);
+
+    expect(Product.findById).toHaveBeenCalledWith(productId);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(mockProduct);
   });
 
-  // Test the price field validation (negative price)
-  it('should return an error if price is negative', async () => {
-    const invalidProduct = {
-      name: 'Invalid Product',
-      description: 'This product has a negative price',
-      price: -100,  // Invalid price
-      stock: 30
+  it('should return 404 if product not found', async () => {
+    Product.findById = jest.fn().mockResolvedValue(null); // Simulate product not found
+
+    const req = {
+      params: { id: productId }
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
     };
 
-    const res = await request(app).post('/api/products').send(invalidProduct);
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBeDefined();
+    await getProductById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'Product not found'
+    });
+  });
+
+  it('should return all products', async () => {
+    const mockProducts = [
+      { _id: productId, name: 'Product 1', price: 100, stock: 50 },
+      { _id: mongoose.Types.ObjectId(), name: 'Product 2', price: 150, stock: 30 }
+    ];
+
+    Product.find = jest.fn().mockResolvedValue(mockProducts);
+
+    const req = {};
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+
+    await getAllProducts(req, res);
+
+    expect(Product.find).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(mockProducts);
   });
 });

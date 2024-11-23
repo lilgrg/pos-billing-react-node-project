@@ -1,9 +1,14 @@
-const express = require('express');  
-const router = express.Router();  
+const express = require('express');
+const router = express.Router();
 
-// Example endpoint  
-router.get('/example', (req, res) => {  
-  res.json({ message: 'Hello from the backend!' });  
-});  
+// Import individual route files
+const customerRoutes = require('./customerRoutes');
+const productRoutes = require('./productRoutes');
+const transactionRoutes = require('./transactionRoutes');
 
-module.exports = router;  
+// Use the imported routes
+router.use('/customers', customerRoutes);
+router.use('/products', productRoutes);
+router.use('/transactions', transactionRoutes);
+
+module.exports = router;
